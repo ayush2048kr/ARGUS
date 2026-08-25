@@ -1,0 +1,19 @@
+{
+  "event_id": "string",
+  "user_id": "string",
+  "timestamp": "ISO-8601 datetime",
+  "source": "string",
+  "event_type": "string",
+  "action": "string",
+  "resource": "string",
+  "resource_sensitivity": "string",
+  "source_ip": "string",
+  "destination": "string",
+  "device_id": "string",
+  "location": "string",
+  "role": "string",
+  "department": "string",
+  "work_schedule": "string",
+  "access_level": "string",
+  "is_external": "boolean"
+}

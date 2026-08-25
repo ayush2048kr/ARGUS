@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node
+node_modules/
+npm-debug.log*
+dist/
+build/
+
+# Frontend environment
+frontend/.env
+frontend/.env.*
+
+# Backend environment
+backend/.env
+backend/.env.*
+
+# Large datasets
+data/raw/
+data/processed/
+*.csv
+*.zip
+*.7z
+*.tar
+*.gz
+*.parquet
+
+# MongoDB
+*.db
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/
