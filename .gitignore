@@ -1,0 +1,27 @@
+# ARGUS - Data Pipeline
+
+# Raw datasets - NEVER commit
+data_pipeline/data/raw/*.csv
+data_pipeline/data/raw/*.json
+data_pipeline/data/raw/*.parquet
+
+# Processed datasets - NEVER commit
+data_pipeline/data/processed/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
