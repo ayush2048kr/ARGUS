@@ -1,9 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
 from app.models.event import Event
 from app.database.mongodb import events_collection
-from fastapi import Depends
-from app.auth.dependencies import get_current_user
-from app.auth.dependencies import require_role
+from app.auth.dependencies import get_current_user, require_role
+
 
 router = APIRouter(
     prefix="/events",
@@ -12,10 +12,13 @@ router = APIRouter(
 
 
 @router.post("/")
-def create_event(event: Event):
+def create_event(
+    event: Event,
+    current_user: dict = Depends(get_current_user)
+):
     event_data = event.model_dump()
 
-    result = events_collection.insert_one(event_data)
+    events_collection.insert_one(event_data)
 
     return {
         "message": "Event created successfully",
@@ -24,7 +27,9 @@ def create_event(event: Event):
 
 
 @router.get("/")
-def get_events():
+def get_events(
+    current_user: dict = Depends(get_current_user)
+):
     events = list(events_collection.find())
 
     for event in events:
@@ -32,8 +37,11 @@ def get_events():
 
     return events
 
+
 @router.get("/protected")
-def protected_test(current_user: dict = Depends(get_current_user)):
+def protected_test(
+    current_user: dict = Depends(get_current_user)
+):
     return {
         "message": "Authentication successful",
         "user": current_user

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import os
-import jwt
+from jose import jwt, JWTError
 
 
 # =========================
@@ -49,15 +49,22 @@ def create_access_token(user_id: str, role: str) -> str:
 # DECODE JWT TOKEN
 # =========================
 
-def decode_access_token(token: str) -> dict:
+def decode_access_token(token: str) -> dict | None:
     """
     Decode and validate a JWT access token.
+
+    Returns the decoded payload when valid.
+    Returns None when the token is invalid or expired.
     """
 
-    payload = jwt.decode(
-        token,
-        SECRET_KEY,
-        algorithms=[ALGORITHM]
-    )
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM]
+        )
 
-    return payload
+        return payload
+
+    except JWTError:
+        return None
