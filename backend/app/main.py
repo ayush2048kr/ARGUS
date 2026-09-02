@@ -4,6 +4,7 @@ from app.api.auth import router as auth_router
 from app.api.users import router as users_router
 from app.api.alerts import router as alerts_router
 from app.api.risks import router as risks_router
+from app.api.dashboard import router as dashboard_router
 
 app = FastAPI(
     title="ARGUS Backend",
@@ -16,6 +17,7 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(alerts_router)
 app.include_router(risks_router)
+app.include_router(dashboard_router)
 
 @app.get("/")
 def root():
