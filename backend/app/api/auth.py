@@ -18,7 +18,6 @@ router = APIRouter(
 class RegisterRequest(BaseModel):
     user_id: str
     password: str
-    role: str = "analyst"
 
 
 class LoginRequest(BaseModel):
@@ -46,7 +45,7 @@ def register_user(data: RegisterRequest):
     user = {
         "user_id": data.user_id,
         "password": hash_password(data.password),
-        "role": data.role,
+        "role": "analyst",
         "is_active": True
     }
 
@@ -55,7 +54,7 @@ def register_user(data: RegisterRequest):
     return {
         "message": "User registered successfully",
         "user_id": data.user_id,
-        "role": data.role
+        "role": "analyst"
     }
 
 
