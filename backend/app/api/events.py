@@ -1,8 +1,13 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.models.event import Event
-from app.database.mongodb import events_collection
 from app.auth.dependencies import get_current_user, require_role
+from app.models.event import Event
+from app.services.event_service import (
+    create_event,
+    get_event_by_id,
+    get_all_events,
+    get_events_for_user,
+)
 
 
 router = APIRouter(
@@ -12,30 +17,31 @@ router = APIRouter(
 
 
 @router.post("/")
-def create_event(
+def create_new_event(
     event: Event,
     current_user: dict = Depends(get_current_user)
 ):
-    event_data = event.model_dump()
-
-    events_collection.insert_one(event_data)
+    event_data = create_event(event.model_dump())
 
     return {
         "message": "Event created successfully",
-        "event_id": event.event_id
+        "event_id": event_data["event_id"]
     }
 
 
 @router.get("/")
-def get_events(
-    current_user: dict = Depends(get_current_user)
+def list_events(
+    current_user: dict = Depends(require_role(["admin", "analyst"]))
 ):
-    events = list(events_collection.find())
+    return get_all_events()
 
-    for event in events:
-        event["_id"] = str(event["_id"])
 
-    return events
+@router.get("/user/{user_id}")
+def list_user_events(
+    user_id: str,
+    current_user: dict = Depends(require_role(["admin", "analyst"]))
+):
+    return get_events_for_user(user_id)
 
 
 @router.get("/protected")
@@ -56,3 +62,19 @@ def admin_test(
         "message": "Admin access successful",
         "user": current_user
     }
+
+
+@router.get("/{event_id}")
+def get_event(
+    event_id: str,
+    current_user: dict = Depends(require_role(["admin", "analyst"]))
+):
+    event = get_event_by_id(event_id)
+
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
+        )
+
+    return event
