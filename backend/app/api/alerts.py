@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth.dependencies import get_current_user, require_role
@@ -50,7 +52,7 @@ def get_alert(
 @router.patch("/{alert_id}/status")
 def update_status(
     alert_id: str,
-    new_status: str,
+    new_status: Literal["open", "investigating", "resolved"],
     current_user: dict = Depends(require_role(["admin", "analyst"]))
 ):
     success = update_alert_status(
