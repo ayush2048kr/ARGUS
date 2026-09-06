@@ -10,10 +10,19 @@ MONGO_URI = os.getenv(
     "mongodb://localhost:27017"
 )
 
+DB_NAME = os.getenv(
+    "MONGO_DB_NAME",
+    "argus"
+)
+
 client = MongoClient(MONGO_URI)
 
-db = client["argus"]
+db = client[DB_NAME]
 
 events_collection = db["events"]
 users_collection = db["users"]
 alerts_collection = db["alerts"]
+
+
+
+
