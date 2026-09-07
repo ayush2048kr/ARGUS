@@ -7,7 +7,10 @@ risks_collection = db["risks"]
 def create_risk_assessment(risk_data: dict):
     risks_collection.insert_one(risk_data)
 
-    return risk_data
+    return risks_collection.find_one(
+        {"risk_id": risk_data["risk_id"]},
+        {"_id": 0}
+    )
 
 
 def get_risk_by_id(risk_id: str):
