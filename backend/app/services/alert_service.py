@@ -4,7 +4,10 @@ from app.database.mongodb import alerts_collection
 def create_alert(alert_data: dict):
     alerts_collection.insert_one(alert_data)
 
-    return alert_data
+    return alerts_collection.find_one(
+        {"alert_id": alert_data["alert_id"]},
+        {"_id": 0}
+    )
 
 
 def get_alert_by_id(alert_id: str):
