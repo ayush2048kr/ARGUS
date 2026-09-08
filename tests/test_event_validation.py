@@ -137,3 +137,31 @@ def test_valid_event_schema_is_accepted():
     assert event.timestamp == datetime.fromisoformat(
         "2026-09-05T10:30:00"
     )
+def test_event_with_nullable_context_fields_is_accepted():
+    event = Event(
+        event_id="ARG-RAW-001",
+        user_id="EMP001",
+        timestamp=datetime.fromisoformat("2026-09-05T10:30:00"),
+        source="DEVICE",
+        event_type="DEVICE_ACTIVITY",
+        action="Connect",
+        resource=None,
+        resource_sensitivity=None,
+        source_ip=None,
+        destination=None,
+        device_id="PC001",
+        location=None,
+        role=None,
+        department=None,
+        work_schedule=None,
+        access_level=None,
+        is_external=None,
+    )
+
+    assert event.event_id == "ARG-RAW-001"
+    assert event.user_id == "EMP001"
+    assert event.device_id == "PC001"
+    assert event.resource is None
+    assert event.role is None
+    assert event.is_external is None 
+

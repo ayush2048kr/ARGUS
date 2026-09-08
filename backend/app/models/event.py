@@ -10,14 +10,14 @@ class Event(BaseModel):
     source: str
     event_type: str
     action: str
-    resource: str
-    resource_sensitivity: str
-    source_ip: str
-    destination: str
+    resource: str | None
+    resource_sensitivity: str | None
+    source_ip: str | None
+    destination: str | None
     device_id: str
-    location: str
-    role: str
-    department: str
-    work_schedule: str
-    access_level: str
-    is_external: bool
+    location: str | None
+    role: str | None
+    department: str | None
+    work_schedule: str | None
+    access_level: str | None
+    is_external: bool | None 
