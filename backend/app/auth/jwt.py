@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
 import os
+
+from dotenv import load_dotenv
 from jose import jwt, JWTError
 
+load_dotenv("backend/.env")
 
 # =========================
 # JWT CONFIGURATION
