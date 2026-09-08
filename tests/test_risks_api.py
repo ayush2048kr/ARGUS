@@ -151,3 +151,34 @@ def test_get_risk_without_token():
     )
 
     assert response.status_code == 401
+
+def test_risk_score_above_100_is_rejected():
+    token = get_analyst_token()
+
+    invalid_risk = TEST_RISK.copy()
+    invalid_risk["risk_id"] = "TEST_RISK_INVALID_HIGH"
+    invalid_risk["risk_score"] = 101
+
+    response = client.post(
+        "/risks/",
+        json=invalid_risk,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 422
+
+
+def test_behavior_deviation_score_below_0_is_rejected():
+    token = get_analyst_token()
+
+    invalid_risk = TEST_RISK.copy()
+    invalid_risk["risk_id"] = "TEST_RISK_INVALID_LOW"
+    invalid_risk["behavior_deviation_score"] = -1
+
+    response = client.post(
+        "/risks/",
+        json=invalid_risk,
+        headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 422

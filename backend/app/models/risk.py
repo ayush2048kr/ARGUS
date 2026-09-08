@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RiskAssessment(BaseModel):
@@ -8,15 +8,13 @@ class RiskAssessment(BaseModel):
     user_id: str
     event_id: str
 
-    risk_score: float
     severity: str
 
-    behavior_deviation_score: float
-    peer_deviation_score: float
-    context_risk_score: float
-
-    activity_severity: float
-
+    risk_score: float = Field(ge=0, le=100)
+    behavior_deviation_score: float = Field(ge=0, le=100)
+    peer_deviation_score: float = Field(ge=0, le=100)
+    context_risk_score: float = Field(ge=0, le=100)
+    activity_severity: float = Field(ge=0, le=100)
     evidence: list[str]
     reason: str
 
