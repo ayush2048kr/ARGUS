@@ -1,72 +1,78 @@
+import os
+import sys
+
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
 
-def create_user_mapping(events: DataFrame) -> DataFrame:
+def create_user_mapping(
+    raw_users_df: DataFrame,
+    raw_user_col: str = "raw_user_id"
+) -> DataFrame:
     """
-    Create a deterministic mapping between the raw user ID
-    and the anonymized ARGUS user ID.
-
-    Example:
-        DTAA/RES0962 -> EMP001
-        DTAA/BJC0569 -> EMP002
+    Create a deterministic mapping from raw user IDs to anonymized ARGUS user IDs (EMP###).
+    
+    The mapping is deterministically ordered by raw_user_id:
+        DTAA/AAA0371 -> EMP001
+        DTAA/AAC0344 -> EMP002
+        ...
+        DTAA/ZAL0996 -> EMP1000
     """
-
     users = (
-        events
-        .select("user_id")
-        .where(F.col("user_id").isNotNull())
+        raw_users_df
+        .select(F.col(raw_user_col).alias("raw_user_id"))
+        .where(F.col("raw_user_id").isNotNull() & (F.col("raw_user_id") != ""))
         .distinct()
     )
 
-    window = Window.orderBy("user_id")
+    window = Window.orderBy("raw_user_id")
 
     mapping = (
         users
         .withColumn(
-            "argus_user_id",
-            F.concat(
-                F.lit("EMP"),
-                F.lpad(
-                    F.row_number().over(window).cast("string"),
-                    3,
-                    "0"
-                )
-            )
+            "user_id",
+            F.format_string("EMP%03d", F.row_number().over(window))
         )
     )
 
     return mapping
 
 
-def anonymize_users(events: DataFrame) -> DataFrame:
+def anonymize_users(
+    events: DataFrame,
+    mapping: DataFrame,
+    raw_user_col: str = "raw_user_id",
+    keep_raw_user: bool = False
+) -> DataFrame:
     """
-    Replace raw dataset user IDs with ARGUS anonymized IDs.
+    Apply shared ARGUS user mapping to events, replacing raw_user_id with user_id.
     """
-
-    mapping = create_user_mapping(events)
-
-    # Rename mapping column so the join does not create
-    # duplicate user_id columns.
-    mapping = mapping.withColumnRenamed(
-        "user_id",
-        "raw_user_id"
+    mapping_sub = mapping.select(
+        F.col("raw_user_id").alias("_map_raw_user"),
+        F.col("user_id").alias("_map_user_id")
     )
 
-    anonymized = (
-        events
-        .join(
-            mapping,
-            events["user_id"] == mapping["raw_user_id"],
-            "left"
-        )
-        .drop("raw_user_id")
-        .drop(events["user_id"])
-        .withColumnRenamed(
-            "argus_user_id",
-            "user_id"
-        )
+    joined = events.join(
+        mapping_sub,
+        events[raw_user_col] == mapping_sub["_map_raw_user"],
+        "left"
     )
 
-    return anonymized
+    if keep_raw_user:
+        result = (
+            joined
+            .withColumn("user_id", F.col("_map_user_id"))
+            .drop("_map_raw_user")
+            .drop("_map_user_id")
+        )
+    else:
+        result = (
+            joined
+            .withColumn("user_id", F.col("_map_user_id"))
+            .drop(raw_user_col)
+            .drop("_map_raw_user")
+            .drop("_map_user_id")
+        )
+
+    return result

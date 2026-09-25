@@ -22,7 +22,29 @@ REQUIRED_COLUMNS = [
     "device_id",
     "class_number",
     "class_label",
+    "url_category",
 ]
+
+CONTROLLED_TAXONOMY = {
+    "social_media",
+    "email",
+    "search",
+    "news",
+    "shopping",
+    "finance",
+    "cloud_storage",
+    "file_sharing",
+    "video_entertainment",
+    "music_entertainment",
+    "technology",
+    "productivity",
+    "education",
+    "travel",
+    "security",
+    "government",
+    "other",
+    "unknown",
+}
 
 
 def fail(message):
@@ -132,23 +154,16 @@ def main():
         "device_id",
         "class_number",
         "class_label",
+        "url_category",
     ]
-
-    null_counts = {}
 
     for column in required_non_null:
         count = events[column].isnull().sum().compute()
-
-        null_counts[column] = int(count)
-
-        print(
-            f"{column}: {count} null values"
-        )
+        print(f"{column}: {count} null values")
 
         if count > 0:
             fail(
-                f"Column '{column}' contains "
-                f"{count} null values."
+                f"Column '{column}' contains {count} null values."
             )
 
     print("Required field null check: PASSED")
@@ -266,10 +281,10 @@ def main():
     print("Action validation: PASSED")
 
     # -----------------------------------------------------
-    # 11. Check URL classes
+    # 11. Check URL classes and semantic categories
     # -----------------------------------------------------
 
-    print("\nChecking URL class assignments...")
+    print("\nChecking URL class assignments & categories...")
 
     invalid_class_numbers = (
         events["class_number"] < 0
@@ -281,10 +296,7 @@ def main():
     )
 
     if invalid_class_numbers > 0:
-        fail(
-            "Found URL classes with negative "
-            "class numbers."
-        )
+        fail("Found URL classes with negative class numbers.")
 
     # Check that class label matches class number.
     expected_labels = (
@@ -304,11 +316,18 @@ def main():
 
     if invalid_class_labels > 0:
         fail(
-            "Found class labels that do not match "
-            "their class numbers."
+            "Found class labels that do not match their class numbers."
         )
 
-    print("URL class validation: PASSED")
+    # Check url_category taxonomy validity
+    distinct_categories = set(events["url_category"].drop_duplicates().compute())
+    print("Distinct categories present in dataset:", sorted(distinct_categories))
+
+    unrecognized_categories = distinct_categories - CONTROLLED_TAXONOMY
+    if unrecognized_categories:
+        fail(f"Unrecognized categories detected: {unrecognized_categories}")
+
+    print("URL class and category validation: PASSED")
 
     # -----------------------------------------------------
     # 12. Check duplicate event IDs
@@ -330,8 +349,7 @@ def main():
 
     if duplicate_event_ids > 0:
         fail(
-            f"Found {duplicate_event_ids} "
-            "duplicate event IDs."
+            f"Found {duplicate_event_ids} duplicate event IDs."
         )
 
     print("Event ID uniqueness: PASSED")
@@ -341,12 +359,8 @@ def main():
     # -----------------------------------------------------
 
     print("\nSample validated HTTP events:")
-
     sample = events.head(5)
-
-    print(
-        sample.to_string(index=False)
-    )
+    print(sample.to_string(index=False))
 
     # -----------------------------------------------------
     # 14. Final result
@@ -361,8 +375,7 @@ def main():
     print("Required columns:", len(REQUIRED_COLUMNS))
     print("Duplicate event IDs:", duplicate_event_ids)
 
-    print("\nHTTP processed data is valid and ready")
-    print("for the next ARGUS data/ML pipeline stage.")
+    print("\nHTTP processed data is valid and ready for the next pipeline stage.")
 
 
 if __name__ == "__main__":

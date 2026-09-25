@@ -62,9 +62,6 @@ def normalize_partition(df):
 
     # -----------------------------------------------------
     # Fields unavailable in the HTTP source
-    #
-    # These remain NULL because the HTTP dataset does not
-    # provide this information.
     # -----------------------------------------------------
 
     df["resource_sensitivity"] = None
@@ -106,17 +103,16 @@ def normalize_partition(df):
     # Timestamp
     # -----------------------------------------------------
 
-    df["timestamp"] = df["timestamp"].astype(
-        "datetime64[ns]"
-    )
+    df["timestamp"] = dd.to_datetime(
+        df["timestamp"],
+        errors="coerce",
+    ).astype("datetime64[ms]")
 
     # -----------------------------------------------------
     # Boolean
     # -----------------------------------------------------
 
-    df["is_external"] = df["is_external"].astype(
-        "boolean"
-    )
+    df["is_external"] = df["is_external"].astype("boolean")
 
     return df
 

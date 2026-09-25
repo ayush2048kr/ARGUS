@@ -23,75 +23,103 @@ ARGUS_COLUMNS = [
 ]
 
 
-def normalize_events(df: DataFrame, source_name: str) -> DataFrame:
+def normalize_device_events(df: DataFrame) -> DataFrame:
     """
-    Normalize a raw CERT device/logon DataFrame
-    into the common ARGUS event schema.
-
-    Expected raw columns:
-        id, date, user, pc, activity
+    Normalize raw CERT device DataFrame.
+    Expected raw columns: id, date, user, pc, activity
     """
-
-    if source_name not in {"DEVICE", "LOGON"}:
-        raise ValueError("source_name must be either DEVICE or LOGON")
-
-    required_columns = {"id", "date", "user", "pc", "activity"}
-    missing_columns = required_columns - set(df.columns)
-
-    if missing_columns:
-        raise ValueError(
-            f"Missing required columns: {sorted(missing_columns)}"
-        )
-
-    normalized = (
+    return (
         df.select(
-            F.col("id").alias("raw_event_id"),
-            F.to_timestamp(
-                F.col("date"),
-                "MM/dd/yyyy HH:mm:ss"
-            ).alias("timestamp"),
+            F.concat(F.lit("ARG-DEVICE-"), F.col("id")).alias("event_id"),
             F.col("user").alias("raw_user_id"),
-            F.col("pc").alias("device_id"),
+            F.to_timestamp(F.col("date"), "MM/dd/yyyy HH:mm:ss").alias("timestamp"),
+            F.lit("DEVICE").alias("source"),
+            F.lit("DEVICE_ACTIVITY").alias("event_type"),
             F.col("activity").alias("action"),
+            F.lit(None).cast("string").alias("resource"),
+            F.lit(None).cast("string").alias("resource_sensitivity"),
+            F.lit(None).cast("string").alias("source_ip"),
+            F.lit(None).cast("string").alias("destination"),
+            F.col("pc").alias("device_id"),
+            F.lit(None).cast("string").alias("location"),
+            F.lit(None).cast("string").alias("role"),
+            F.lit(None).cast("string").alias("department"),
+            F.lit(None).cast("string").alias("work_schedule"),
+            F.lit(None).cast("string").alias("access_level"),
+            F.lit(None).cast("boolean").alias("is_external"),
         )
-        .withColumn("source", F.lit(source_name))
-        .withColumn(
-            "event_type",
-            F.when(
-                F.col("source") == "DEVICE",
-                F.lit("DEVICE_ACTIVITY")
-            ).otherwise(
-                F.lit("LOGON_ACTIVITY")
-            )
-        )
-        .withColumn("resource", F.lit(None).cast("string"))
-        .withColumn(
-            "resource_sensitivity",
-            F.lit(None).cast("string")
-        )
-        .withColumn("source_ip", F.lit(None).cast("string"))
-        .withColumn("destination", F.lit(None).cast("string"))
-        .withColumn("location", F.lit(None).cast("string"))
-        .withColumn("role", F.lit(None).cast("string"))
-        .withColumn("department", F.lit(None).cast("string"))
-        .withColumn("work_schedule", F.lit(None).cast("string"))
-        .withColumn("access_level", F.lit(None).cast("string"))
-        .withColumn(
-            "is_external",
-            F.lit(None).cast("boolean")
-        )
-        .withColumn(
-            "event_id",
-            F.concat(
-                F.lit("ARG-RAW-"),
-                F.col("raw_event_id")
-            )
-        )
-        .withColumn(
-            "user_id",
-            F.col("raw_user_id")
-        )
-        .select(ARGUS_COLUMNS)
     )
 
-    return normalized
+
+def normalize_logon_events(df: DataFrame) -> DataFrame:
+    """
+    Normalize raw CERT logon DataFrame.
+    Expected raw columns: id, date, user, pc, activity
+    """
+    return (
+        df.select(
+            F.concat(F.lit("ARG-LOGON-"), F.col("id")).alias("event_id"),
+            F.col("user").alias("raw_user_id"),
+            F.to_timestamp(F.col("date"), "MM/dd/yyyy HH:mm:ss").alias("timestamp"),
+            F.lit("LOGON").alias("source"),
+            F.lit("LOGON_ACTIVITY").alias("event_type"),
+            F.col("activity").alias("action"),
+            F.lit(None).cast("string").alias("resource"),
+            F.lit(None).cast("string").alias("resource_sensitivity"),
+            F.lit(None).cast("string").alias("source_ip"),
+            F.lit(None).cast("string").alias("destination"),
+            F.col("pc").alias("device_id"),
+            F.lit(None).cast("string").alias("location"),
+            F.lit(None).cast("string").alias("role"),
+            F.lit(None).cast("string").alias("department"),
+            F.lit(None).cast("string").alias("work_schedule"),
+            F.lit(None).cast("string").alias("access_level"),
+            F.lit(None).cast("boolean").alias("is_external"),
+        )
+    )
+
+
+def normalize_http_events(df: DataFrame) -> DataFrame:
+    """
+    Normalize raw CERT http DataFrame.
+    Expected raw columns: id, date, user, pc, url (or raw_event_id, date, user, pc, url)
+    """
+    id_col = "raw_event_id" if "raw_event_id" in df.columns else "id"
+    url_col = "url" if "url" in df.columns else "activity"
+
+    return (
+        df.select(
+            F.concat(F.lit("ARG-HTTP-"), F.col(id_col)).alias("event_id"),
+            F.col("user").alias("raw_user_id"),
+            F.to_timestamp(F.col("date"), "MM/dd/yyyy HH:mm:ss").alias("timestamp"),
+            F.lit("HTTP").alias("source"),
+            F.lit("HTTP_ACTIVITY").alias("event_type"),
+            F.lit("VISIT_URL").alias("action"),
+            F.trim(F.col(url_col)).alias("resource"),
+            F.lit(None).cast("string").alias("resource_sensitivity"),
+            F.lit(None).cast("string").alias("source_ip"),
+            F.lit(None).cast("string").alias("destination"),
+            F.col("pc").alias("device_id"),
+            F.lit(None).cast("string").alias("location"),
+            F.lit(None).cast("string").alias("role"),
+            F.lit(None).cast("string").alias("department"),
+            F.lit(None).cast("string").alias("work_schedule"),
+            F.lit(None).cast("string").alias("access_level"),
+            F.lit(None).cast("boolean").alias("is_external"),
+        )
+    )
+
+
+def normalize_events(df: DataFrame, source_name: str) -> DataFrame:
+    """
+    Dispatch normalization for a given source name (DEVICE, LOGON, HTTP).
+    """
+    source_upper = source_name.upper()
+    if source_upper == "DEVICE":
+        return normalize_device_events(df)
+    elif source_upper == "LOGON":
+        return normalize_logon_events(df)
+    elif source_upper == "HTTP":
+        return normalize_http_events(df)
+    else:
+        raise ValueError(f"Unsupported source_name: {source_name}. Must be DEVICE, LOGON, or HTTP.")
