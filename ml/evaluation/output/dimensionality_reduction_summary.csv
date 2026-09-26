@@ -1,0 +1,4 @@
+method,input_dimensions,output_dimensions
+PCA,15,2
+RBF Kernel PCA,15,2
+UMAP,15,2

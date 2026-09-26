@@ -1,0 +1,16 @@
+cluster_id,feature,standardized_centroid,absolute_deviation,direction
+0,http_request_count_1d,2.2182050977194847,2.2182050977194847,above_population_average
+0,total_activity_count_1d,2.194355398816744,2.194355398816744,above_population_average
+0,distinct_domains_count_1d,1.9424938665405092,1.9424938665405092,above_population_average
+0,unknown_url_ratio_1d,-1.6434197591720938,1.6434197591720938,below_population_average
+0,social_media_visit_count_1d,1.2701061741310289,1.2701061741310289,above_population_average
+1,total_activity_count_1d,-0.3895415635802977,0.3895415635802977,below_population_average
+1,http_request_count_1d,-0.3792641112866541,0.3792641112866541,below_population_average
+1,distinct_domains_count_1d,-0.3272791633680192,0.3272791633680192,below_population_average
+1,unknown_url_ratio_1d,0.29065058507828,0.29065058507828,above_population_average
+1,social_media_visit_count_1d,-0.217001870113987,0.217001870113987,below_population_average
+2,distinct_devices_count_1d,8.980166186714337,8.980166186714337,above_population_average
+2,logoff_count_1d,8.957097959159782,8.957097959159782,above_population_average
+2,login_count_1d,7.400215553356148,7.400215553356148,above_population_average
+2,active_span_hours_1d,5.430935186192449,5.430935186192449,above_population_average
+2,off_hours_event_ratio_1d,1.6302322798409774,1.6302322798409774,above_population_average

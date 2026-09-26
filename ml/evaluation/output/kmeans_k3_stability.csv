@@ -1,0 +1,7 @@
+reference_seed,comparison_seed,adjusted_rand_index
+42,0,1.0
+42,1,1.0
+42,2,1.0
+42,3,1.0
+42,4,1.0
+42,42,1.0
