@@ -8,6 +8,7 @@ import StatCard from "./components/dashboard/StatCard";
 
 import Alerts from "./pages/Alerts";
 import AlertInvestigation from "./pages/AlertInvestigation";
+import ActivityExplorer from "./pages/ActivityExplorer";
 import UserInvestigation, {
   sampleUsers,
 } from "./pages/UserInvestigation";
@@ -314,27 +315,7 @@ function App() {
           )}
 
           {/* ACTIVITY EXPLORER */}
-          {activePage === "Activity" && (
-            <section>
-              <h2 className="text-2xl font-semibold text-slate-900">
-                Activity Explorer
-              </h2>
-
-              <p className="mt-2 text-slate-600">
-                Explore user activity and contextual event information.
-              </p>
-
-              <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-lg font-semibold text-slate-900">
-                  Recent Activity
-                </h3>
-                <p className="mt-2 text-sm text-slate-500">
-                  Activity events will appear here when the backend API is
-                  integrated.
-                </p>
-              </div>
-            </section>
-          )}
+          {activePage === "Activity" && <ActivityExplorer />}
         </main>
       </div>
     </div>
