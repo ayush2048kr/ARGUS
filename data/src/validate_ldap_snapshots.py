@@ -89,19 +89,23 @@ def _try_read_csv(path: str) -> tuple[pd.DataFrame | None, str | None]:
 # Main validation
 # ---------------------------------------------------------------------------
 
-def validate_ldap_snapshots(ldap_dir: str = LDAP_DIR) -> dict:
+def validate_ldap_snapshots(
+    ldap_dir: str = LDAP_DIR,
+    output_validation: str = OUTPUT_VALIDATION,
+) -> dict:
     """
     Run all LDAP snapshot validation checks.
 
     Returns a structured validation report dict that is also written to
-    OUTPUT_VALIDATION as JSON.
+    *output_validation* as JSON.
     """
     print("============================================================")
-    print("ARGUS M1 — LDAP MONTHLY SNAPSHOT VALIDATION")
+    print("ARGUS M1 -- LDAP MONTHLY SNAPSHOT VALIDATION")
     print("============================================================")
 
     report: dict = {
         "ldap_dir": ldap_dir,
+        "output_validation": output_validation,
         "expected_months": len(EXPECTED_MONTHS),
         "expected_columns": EXPECTED_COLUMNS,
         "files_found": [],
@@ -132,7 +136,7 @@ def validate_ldap_snapshots(ldap_dir: str = LDAP_DIR) -> dict:
         print(f"\n[CRITICAL] {msg}")
         report["validation_errors"].append(msg)
         report["validation_passed"] = False
-        _write_report(report)
+        _write_report(report, path=output_validation)
         return report
 
     print(f"\nLDAP directory found: {ldap_dir}")
@@ -363,22 +367,22 @@ def validate_ldap_snapshots(ldap_dir: str = LDAP_DIR) -> dict:
     # 7. Write JSON report
     # ------------------------------------------------------------------
     print("\n[6/6] Writing validation report...")
-    _write_report(report)
+    _write_report(report, path=output_validation)
 
     print("\n============================================================")
-    print(f"LDAP SNAPSHOT VALIDATION — {status_label}")
+    print(f"LDAP SNAPSHOT VALIDATION -- {status_label}")
     print("============================================================")
     if not report["validation_passed"]:
         print("Resolve the hard failures listed above before running enrichment.")
     else:
         print("All present files passed validation.")
-    print(f"Detailed report: {OUTPUT_VALIDATION}")
+    print(f"Detailed report: {output_validation}")
 
     return report
 
 
 def _write_report(report: dict, path: str = OUTPUT_VALIDATION) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2, default=str)
     print(f"  Report written to: {path}")
@@ -390,5 +394,6 @@ def _write_report(report: dict, path: str = OUTPUT_VALIDATION) -> None:
 
 if __name__ == "__main__":
     ldap_dir = sys.argv[1] if len(sys.argv) > 1 else LDAP_DIR
-    result = validate_ldap_snapshots(ldap_dir)
+    out_val = sys.argv[2] if len(sys.argv) > 2 else OUTPUT_VALIDATION
+    result = validate_ldap_snapshots(ldap_dir, output_validation=out_val)
     sys.exit(0 if result["validation_passed"] else 1)

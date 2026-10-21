@@ -52,6 +52,21 @@ from normalize_user_id import (  # noqa: E402
     normalize_raw_user_id,
     normalize_series,
 )
+from validate_ldap_snapshots import (  # noqa: E402
+    validate_ldap_snapshots,
+    EXPECTED_MONTHS,
+    EXPECTED_COLUMNS,
+)
+from enrich_employee_context import (  # noqa: E402
+    LdapSnapshotCache,
+    enrich_employee_context,
+    CANONICAL_COLUMNS,
+    STATUS_MATCHED,
+    STATUS_NOT_IN_MONTH,
+    STATUS_INVALID_USER,
+    STATUS_INVALID_TS,
+    STATUS_LDAP_MISSING,
+)
 
 
 # ===========================================================================
@@ -577,3 +592,449 @@ class TestExpectedMonthsList:
     def test_no_duplicate_months(self):
         from validate_ldap_snapshots import EXPECTED_MONTHS
         assert len(set(EXPECTED_MONTHS)) == len(EXPECTED_MONTHS)
+
+
+# ===========================================================================
+# SECTION 15 — Snapshot discovery and validation checks
+# ===========================================================================
+
+class TestSnapshotDiscoveryAndValidation:
+
+    def test_validator_finds_all_snapshots_in_temp_dir(self, tmp_path):
+        ldap_dir = tmp_path / "LDAP"
+        ldap_dir.mkdir()
+        header = ["employee_name", "user_id", "Domain", "Email", "Role"]
+        row = ["Alice Smith", "AAA0001", "corp.com", "alice@corp.com", "Engineer"]
+
+        for y, m in EXPECTED_MONTHS:
+            fpath = ldap_dir / f"{y:04d}-{m:02d}.csv"
+            with open(fpath, "w", newline="", encoding="utf-8") as fh:
+                writer = csv.writer(fh)
+                writer.writerow(header)
+                writer.writerow(row)
+
+        out_json = tmp_path / "val.json"
+        from validate_ldap_snapshots import validate_ldap_snapshots
+        report = validate_ldap_snapshots(str(ldap_dir), output_validation=str(out_json))
+        assert report["validation_passed"] is True
+        assert len(report["files_found"]) == 18
+        assert len(report["files_missing"]) == 0
+        assert report["overall"]["column_consistency"] == "CONSISTENT"
+        assert report["overall"]["total_rows_across_all_months"] == 18
+        assert out_json.exists()
+
+    def test_validator_missing_snapshot_fails(self, tmp_path):
+        ldap_dir = tmp_path / "LDAP"
+        ldap_dir.mkdir()
+        header = ["employee_name", "user_id", "Domain", "Email", "Role"]
+
+        # Write only 17 months (skip 2011-05)
+        for y, m in EXPECTED_MONTHS[:-1]:
+            fpath = ldap_dir / f"{y:04d}-{m:02d}.csv"
+            with open(fpath, "w", newline="", encoding="utf-8") as fh:
+                writer = csv.writer(fh)
+                writer.writerow(header)
+                writer.writerow(["Alice", "AAA0001", "corp.com", "alice@corp.com", "Engineer"])
+
+        out_json = tmp_path / "val_missing.json"
+        from validate_ldap_snapshots import validate_ldap_snapshots
+        report = validate_ldap_snapshots(str(ldap_dir), output_validation=str(out_json))
+        assert report["validation_passed"] is False
+        assert "2011-05.csv" in report["files_missing"]
+        assert out_json.exists()
+
+    def test_validator_missing_required_column_fails(self, tmp_path):
+        ldap_dir = tmp_path / "LDAP"
+        ldap_dir.mkdir()
+        # Missing 'Role' column
+        header = ["employee_name", "user_id", "Domain", "Email"]
+
+        for y, m in EXPECTED_MONTHS:
+            fpath = ldap_dir / f"{y:04d}-{m:02d}.csv"
+            with open(fpath, "w", newline="", encoding="utf-8") as fh:
+                writer = csv.writer(fh)
+                writer.writerow(header)
+                writer.writerow(["Alice", "AAA0001", "corp.com", "alice@corp.com"])
+
+        out_json = tmp_path / "val_bad_schema.json"
+        from validate_ldap_snapshots import validate_ldap_snapshots
+        report = validate_ldap_snapshots(str(ldap_dir), output_validation=str(out_json))
+        assert report["validation_passed"] is False
+        assert len(report["schema_issues"]) > 0
+        assert out_json.exists()
+
+    def test_validator_blank_user_id_reported(self, tmp_path):
+        ldap_dir = tmp_path / "LDAP"
+        ldap_dir.mkdir()
+        header = ["employee_name", "user_id", "Domain", "Email", "Role"]
+
+        for idx, (y, m) in enumerate(EXPECTED_MONTHS):
+            fpath = ldap_dir / f"{y:04d}-{m:02d}.csv"
+            with open(fpath, "w", newline="", encoding="utf-8") as fh:
+                writer = csv.writer(fh)
+                writer.writerow(header)
+                # First file has one blank user_id
+                uid = "" if idx == 0 else "AAA0001"
+                writer.writerow(["Alice", uid, "corp.com", "alice@corp.com", "Engineer"])
+
+        out_json = tmp_path / "val_blank_uid.json"
+        from validate_ldap_snapshots import validate_ldap_snapshots
+        report = validate_ldap_snapshots(str(ldap_dir), output_validation=str(out_json))
+        assert report["overall"]["total_invalid_user_id_rows"] == 1
+        assert out_json.exists()
+
+    def test_validator_nonexistent_dir_fails(self, tmp_path):
+        out_json = tmp_path / "val_nonexistent.json"
+        from validate_ldap_snapshots import validate_ldap_snapshots
+        report = validate_ldap_snapshots(str(tmp_path / "does_not_exist"), output_validation=str(out_json))
+        assert report["validation_passed"] is False
+        assert len(report["validation_errors"]) > 0
+        assert out_json.exists()
+
+    def test_invalid_directory_validation_does_not_overwrite_production_report(self, tmp_path):
+        """
+        Regression test: validating an invalid/nonexistent directory with a custom
+        output_validation path must write only to the temporary path and NEVER
+        overwrite or modify the production context_enrichment_validation.json file.
+        """
+        from validate_ldap_snapshots import validate_ldap_snapshots
+
+        prod_path = REPO_ROOT / "data" / "processed" / "context_enrichment_validation.json"
+
+        # Record production state before the test
+        prod_exists = prod_path.exists()
+        prod_content_before = prod_path.read_text(encoding="utf-8") if prod_exists else None
+        prod_mtime_before = prod_path.stat().st_mtime if prod_exists else None
+
+        # Execute validator on nonexistent directory targeting temp path
+        temp_report = tmp_path / "temp_failure_report.json"
+        report = validate_ldap_snapshots(
+            str(tmp_path / "definitely_nonexistent_ldap"),
+            output_validation=str(temp_report),
+        )
+
+        assert report["validation_passed"] is False
+        assert temp_report.exists()
+        temp_data = json.loads(temp_report.read_text(encoding="utf-8"))
+        assert temp_data["validation_passed"] is False
+
+        # Production report must remain completely identical and untouched
+        if prod_exists:
+            assert prod_path.exists()
+            assert prod_path.stat().st_mtime == prod_mtime_before
+            assert prod_path.read_text(encoding="utf-8") == prod_content_before
+
+
+# ===========================================================================
+# SECTION 16 — Employee mapping reuse
+# ===========================================================================
+
+class TestEmployeeMappingReuse:
+
+    def test_cache_uses_existing_mapping(self, tmp_path):
+        ldap_dir = tmp_path / "LDAP"
+        ldap_dir.mkdir()
+
+        mapping_df = pd.DataFrame([
+            {"raw_user_id": "DTAA/AAA0371", "user_id": "EMP001"},
+            {"raw_user_id": "DTAA/AAC0344", "user_id": "EMP002"},
+        ])
+        cache = LdapSnapshotCache(str(ldap_dir), mapping_df)
+
+        assert cache._emp_to_bare["EMP001"] == "AAA0371"
+        assert cache._emp_to_bare["EMP002"] == "AAC0344"
+
+    def test_cache_handles_whitespace_in_mapping(self, tmp_path):
+        ldap_dir = tmp_path / "LDAP"
+        ldap_dir.mkdir()
+
+        mapping_df = pd.DataFrame([
+            {"raw_user_id": "  DTAA/AAA0371  ", "user_id": "EMP001"},
+        ])
+        cache = LdapSnapshotCache(str(ldap_dir), mapping_df)
+        assert cache._emp_to_bare["EMP001"] == "AAA0371"
+
+    def test_unmapped_emp_id_returns_invalid_user(self, tmp_path):
+        ldap_dir = tmp_path / "LDAP"
+        ldap_dir.mkdir()
+        # Create a valid snapshot file for 2010-01
+        with open(ldap_dir / "2010-01.csv", "w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(["employee_name", "user_id", "Domain", "Email", "Role"])
+            writer.writerow(["Alice", "AAA0371", "corp.com", "alice@corp.com", "Admin"])
+
+        mapping_df = pd.DataFrame([
+            {"raw_user_id": "DTAA/AAA0371", "user_id": "EMP001"},
+        ])
+        cache = LdapSnapshotCache(str(ldap_dir), mapping_df)
+        status, role, domain = cache.lookup("EMP999", 2010, 1)
+        assert status == STATUS_INVALID_USER
+        assert role is None
+        assert domain is None
+
+
+# ===========================================================================
+# SECTION 17 — Full context enrichment pipeline on synthetic data
+# ===========================================================================
+
+class TestFullContextEnrichmentPipeline:
+
+    def test_synthetic_pipeline_run_success(self, tmp_path):
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        ldap_dir = tmp_path / "LDAP"
+        ldap_dir.mkdir()
+
+        header = ["employee_name", "user_id", "Domain", "Email", "Role"]
+        # 2010-01 has EMP001 and EMP002
+        with open(ldap_dir / "2010-01.csv", "w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(header)
+            writer.writerow(["Alice Admin", "AAA0001", "corp.net", "alice@corp.net", "Security Officer"])
+            writer.writerow(["Bob Builder", "BBB0002", "corp.net", "bob@corp.net", "Contractor"])
+
+        # 2010-02 has only EMP001 (EMP002 departed)
+        with open(ldap_dir / "2010-02.csv", "w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(header)
+            writer.writerow(["Alice Admin", "AAA0001", "corp.net", "alice@corp.net", "Security Officer"])
+
+        # Mapping CSV
+        mapping_path = tmp_path / "user_mapping.csv"
+        pd.DataFrame([
+            {"raw_user_id": "DTAA/AAA0001", "user_id": "EMP001"},
+            {"raw_user_id": "DTAA/BBB0002", "user_id": "EMP002"},
+        ]).to_csv(mapping_path, index=False)
+
+        # Master events parquet
+        master_dir = tmp_path / "master_events"
+        master_dir.mkdir()
+
+        events_data = pd.DataFrame([
+            {
+                "event_id": "ARG-LOGON-001",
+                "user_id": "EMP001",
+                "timestamp": pd.Timestamp("2010-01-15 08:00:00"),
+                "source": "LOGON",
+                "event_type": "LOGON_ACTIVITY",
+                "action": "Logon",
+                "resource": None,
+                "resource_sensitivity": None,
+                "source_ip": "10.0.0.1",
+                "destination": None,
+                "device_id": "PC-001",
+                "location": "HQ",
+                "role": None,
+                "department": None,
+                "work_schedule": None,
+                "access_level": None,
+                "is_external": False,
+            },
+            {
+                "event_id": "ARG-HTTP-002",
+                "user_id": "EMP002",
+                "timestamp": pd.Timestamp("2010-02-15 09:30:00"),
+                "source": "HTTP",
+                "event_type": "HTTP_ACTIVITY",
+                "action": "Visit",
+                "resource": "http://intranet.local",
+                "resource_sensitivity": None,
+                "source_ip": "10.0.0.2",
+                "destination": "intranet.local",
+                "device_id": "PC-002",
+                "location": "Branch",
+                "role": None,
+                "department": None,
+                "work_schedule": None,
+                "access_level": None,
+                "is_external": False,
+            },
+            {
+                "event_id": "ARG-DEVICE-003",
+                "user_id": "EMP001",
+                "timestamp": pd.Timestamp("2010-05-10 14:00:00"),
+                "source": "DEVICE",
+                "event_type": "DEVICE_ACTIVITY",
+                "action": "Connect",
+                "resource": "USB-DISK-1",
+                "resource_sensitivity": None,
+                "source_ip": None,
+                "destination": None,
+                "device_id": "PC-001",
+                "location": "HQ",
+                "role": None,
+                "department": None,
+                "work_schedule": None,
+                "access_level": None,
+                "is_external": False,
+            },
+            {
+                "event_id": "ARG-LOGON-004",
+                "user_id": "EMP999",
+                "timestamp": pd.Timestamp("2010-01-20 10:00:00"),
+                "source": "LOGON",
+                "event_type": "LOGON_ACTIVITY",
+                "action": "Logon",
+                "resource": None,
+                "resource_sensitivity": None,
+                "source_ip": "10.0.0.9",
+                "destination": None,
+                "device_id": "PC-999",
+                "location": "HQ",
+                "role": None,
+                "department": None,
+                "work_schedule": None,
+                "access_level": None,
+                "is_external": False,
+            },
+        ])
+        table = pa.Table.from_pandas(events_data, preserve_index=False)
+        pq.write_table(table, master_dir / "part-0000.parquet")
+
+        out_enriched_dir = tmp_path / "enriched"
+        out_user_month = tmp_path / "user_month.csv"
+        out_val = tmp_path / "val.json"
+
+        report = enrich_employee_context(
+            master_path=str(master_dir),
+            ldap_dir=str(ldap_dir),
+            user_mapping_csv=str(mapping_path),
+            output_dir=str(out_enriched_dir),
+            output_user_month=str(out_user_month),
+            output_validation=str(out_val),
+        )
+
+        assert report["validation_passed"] is True
+        assert report["counts"]["input_events_total"] == 4
+        assert report["counts"]["output_events_total"] == 4
+        assert report["counts"]["events_lost"] == 0
+
+        # Status breakdown:
+        # 1 MATCHED (EMP001 in 2010-01)
+        # 1 USER_NOT_IN_MONTH (EMP002 in 2010-02)
+        # 1 LDAP_MONTH_MISSING (EMP001 in 2010-05)
+        # 1 INVALID_USER_ID (EMP999 not in user_mapping)
+        assert report["match_status_breakdown"][STATUS_MATCHED] == 1
+        assert report["match_status_breakdown"][STATUS_NOT_IN_MONTH] == 1
+        assert report["match_status_breakdown"][STATUS_LDAP_MISSING] == 1
+        assert report["match_status_breakdown"][STATUS_INVALID_USER] == 1
+
+        # Check privacy: no PII columns in output files
+        logon_out = pq.read_table(out_enriched_dir / "logon_enriched.parquet")
+        logon_cols = logon_out.schema.names
+        assert "employee_name" not in logon_cols
+        assert "Email" not in logon_cols
+        assert "email" not in logon_cols
+
+        # Check attached fields on matched row
+        logon_df = logon_out.to_pandas()
+        matched_row = logon_df[logon_df["user_id"] == "EMP001"].iloc[0]
+        assert matched_row["role"] == "Security Officer"
+        assert matched_row["ldap_domain"] == "corp.net"
+        assert matched_row["context_match_status"] == STATUS_MATCHED
+
+        # Check unmatched row preserved with null role
+        invalid_row = logon_df[logon_df["user_id"] == "EMP999"].iloc[0]
+        assert pd.isna(invalid_row["role"])
+        assert invalid_row["context_match_status"] == STATUS_INVALID_USER
+
+        # Check user_month.csv
+        um_df = pd.read_csv(out_user_month)
+        assert len(um_df) == 1
+        assert um_df.iloc[0]["user_id"] == "EMP001"
+        assert um_df.iloc[0]["month"] == "2010-01"
+        assert um_df.iloc[0]["role"] == "Security Officer"
+        assert um_df.iloc[0]["event_count"] == 1
+
+
+# ===========================================================================
+# SECTION 18 — Duplicate join prevention
+# ===========================================================================
+
+class TestDuplicateJoinPrevention:
+
+    def test_duplicate_ldap_records_do_not_duplicate_activity_events(self, tmp_path):
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        ldap_dir = tmp_path / "LDAP"
+        ldap_dir.mkdir()
+
+        # Duplicate entries for AAA0001 with differing roles
+        header = ["employee_name", "user_id", "Domain", "Email", "Role"]
+        with open(ldap_dir / "2010-01.csv", "w", newline="", encoding="utf-8") as fh:
+            writer = csv.writer(fh)
+            writer.writerow(header)
+            writer.writerow(["Alice 1", "AAA0001", "corp.net", "alice1@corp.net", "Primary Role"])
+            writer.writerow(["Alice 2", "AAA0001", "corp.net", "alice2@corp.net", "Secondary Role"])
+
+        mapping_path = tmp_path / "user_mapping.csv"
+        pd.DataFrame([
+            {"raw_user_id": "DTAA/AAA0001", "user_id": "EMP001"},
+        ]).to_csv(mapping_path, index=False)
+
+        master_dir = tmp_path / "master"
+        master_dir.mkdir()
+        events_data = pd.DataFrame([
+            {
+                "event_id": "ARG-LOGON-001",
+                "user_id": "EMP001",
+                "timestamp": pd.Timestamp("2010-01-15 08:00:00"),
+                "source": "LOGON",
+                "event_type": "LOGON_ACTIVITY",
+                "action": "Logon",
+                "resource": None,
+                "resource_sensitivity": None,
+                "source_ip": "10.0.0.1",
+                "destination": None,
+                "device_id": "PC-001",
+                "location": "HQ",
+                "role": None,
+                "department": None,
+                "work_schedule": None,
+                "access_level": None,
+                "is_external": False,
+            }
+        ])
+        table = pa.Table.from_pandas(events_data, preserve_index=False)
+        pq.write_table(table, master_dir / "part-0000.parquet")
+
+        out_enriched_dir = tmp_path / "enriched"
+        out_user_month = tmp_path / "user_month.csv"
+        out_val = tmp_path / "val.json"
+
+        report = enrich_employee_context(
+            master_path=str(master_dir),
+            ldap_dir=str(ldap_dir),
+            user_mapping_csv=str(mapping_path),
+            output_dir=str(out_enriched_dir),
+            output_user_month=str(out_user_month),
+            output_validation=str(out_val),
+        )
+
+        assert report["counts"]["input_events_total"] == 1
+        assert report["counts"]["output_events_total"] == 1
+        assert report["counts"]["events_lost"] == 0
+
+        # Read back logon parquet
+        out_table = pq.read_table(out_enriched_dir / "logon_enriched.parquet")
+        assert out_table.num_rows == 1
+        # First occurrence wins
+        assert out_table.to_pandas().iloc[0]["role"] == "Primary Role"
+
+
+# ===========================================================================
+# SECTION 19 — Existing feature outputs unchanged
+# ===========================================================================
+
+class TestExistingFeatureOutputsUnchanged:
+
+    def test_existing_pipeline_features_intact(self):
+        f1 = REPO_ROOT / "data" / "processed" / "user_features_stage1_daily.parquet"
+        f2 = REPO_ROOT / "data" / "processed" / "user_features_stage2_history.parquet"
+        f3 = REPO_ROOT / "data" / "processed" / "user_peer_clusters.parquet"
+
+        assert f1.exists(), f"Missing: {f1}"
+        assert f2.exists(), f"Missing: {f2}"
+        assert f3.exists(), f"Missing: {f3}"
