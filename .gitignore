@@ -21,3 +21,7 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+# Generated ARGUS risk-pipeline outputs
+ml/evaluation/output/argus_risk_pipeline_daily.csv
+ml/evaluation/output/argus_risk_pipeline_summary.csv
+ml/evaluation/output/peer_deviation_user_profiles.csv
