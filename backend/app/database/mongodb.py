@@ -1,3 +1,4 @@
+
 import os
 
 from dotenv import load_dotenv
@@ -7,12 +8,12 @@ load_dotenv("backend/.env")
 
 MONGO_URI = os.getenv(
     "MONGO_URI",
-    "mongodb://localhost:27017"
+    "mongodb://localhost:27017",
 )
 
 DB_NAME = os.getenv(
     "MONGO_DB_NAME",
-    "argus"
+    "argus",
 )
 
 client = MongoClient(MONGO_URI)
@@ -23,6 +24,9 @@ events_collection = db["events"]
 users_collection = db["users"]
 alerts_collection = db["alerts"]
 
-
-
-
+# Enforce unique user IDs at the database level.
+users_collection.create_index(
+    [("user_id", 1)],
+    unique=True,
+    name="unique_user_id",
+)
