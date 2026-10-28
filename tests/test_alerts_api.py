@@ -1,6 +1,7 @@
 
 from datetime import datetime
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -44,7 +45,9 @@ def setup_module():
 
 
 def teardown_module():
-    alerts_collection.delete_many({"alert_id": TEST_ALERT_ID})
+    alerts_collection.delete_many(
+        {"alert_id": {"$regex": "^TEST_ALERT_API"}}
+    )
     users_collection.delete_one({"user_id": TEST_USER_ID})
 
 
@@ -151,3 +154,56 @@ def test_create_alert_without_token():
     response = client.post("/alerts/", json=TEST_ALERT)
 
     assert response.status_code == 401
+
+
+@pytest.mark.parametrize("risk_score", [-1, 100.01, 101])
+def test_create_alert_rejects_out_of_range_score(risk_score):
+    token = get_analyst_token()
+    payload = {
+        **TEST_ALERT,
+        "alert_id": f"{TEST_ALERT_ID}_SCORE_{str(risk_score).replace('.', '_')}",
+        "risk_score": risk_score,
+    }
+
+    response = client.post(
+        "/alerts/",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("severity", ["UNKNOWN", "critical", ""])
+def test_create_alert_rejects_invalid_severity(severity):
+    token = get_analyst_token()
+    payload = {
+        **TEST_ALERT,
+        "alert_id": f"{TEST_ALERT_ID}_SEVERITY",
+        "severity": severity,
+    }
+
+    response = client.post(
+        "/alerts/",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_alert_rejects_empty_evidence():
+    token = get_analyst_token()
+    payload = {
+        **TEST_ALERT,
+        "alert_id": f"{TEST_ALERT_ID}_EMPTY_EVIDENCE",
+        "evidence": [],
+    }
+
+    response = client.post(
+        "/alerts/",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
