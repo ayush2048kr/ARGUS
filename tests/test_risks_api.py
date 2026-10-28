@@ -1,6 +1,7 @@
 
 from datetime import datetime
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -32,6 +33,17 @@ TEST_RISK = {
     "created_at": "2026-09-07T10:30:00",
 }
 
+TEST_RISK_IDS = [
+    TEST_RISK_ID,
+    "TEST_RISK_INVALID_HIGH",
+    "TEST_RISK_INVALID_LOW",
+    "TEST_RISK_SEVERITY_UNKNOWN",
+    "TEST_RISK_SEVERITY_critical",
+    "TEST_RISK_SEVERITY_EMPTY",
+    "TEST_RISK_EMPTY_EVIDENCE",
+    "TEST_RISK_EMPTY_REASON",
+]
+
 
 def setup_module():
     users_collection.update_one(
@@ -45,22 +57,15 @@ def setup_module():
         },
         upsert=True,
     )
+
     risks_collection.delete_many(
-        {"risk_id": {"$in": [
-            TEST_RISK_ID,
-            "TEST_RISK_INVALID_HIGH",
-            "TEST_RISK_INVALID_LOW",
-        ]}}
+        {"risk_id": {"$in": TEST_RISK_IDS}}
     )
 
 
 def teardown_module():
     risks_collection.delete_many(
-        {"risk_id": {"$in": [
-            TEST_RISK_ID,
-            "TEST_RISK_INVALID_HIGH",
-            "TEST_RISK_INVALID_LOW",
-        ]}}
+        {"risk_id": {"$in": TEST_RISK_IDS}}
     )
     users_collection.delete_one({"user_id": TEST_USER_ID})
 
@@ -187,6 +192,57 @@ def test_behavior_deviation_score_below_0_is_rejected():
     invalid_risk = TEST_RISK.copy()
     invalid_risk["risk_id"] = "TEST_RISK_INVALID_LOW"
     invalid_risk["behavior_deviation_score"] = -1
+
+    response = client.post(
+        "/risks/",
+        json=invalid_risk,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("severity", ["UNKNOWN", "critical", ""])
+def test_invalid_risk_severity_is_rejected(severity):
+    token = get_analyst_token()
+
+    invalid_risk = TEST_RISK.copy()
+    invalid_risk["risk_id"] = (
+        f"TEST_RISK_SEVERITY_{severity or 'EMPTY'}"
+    )
+    invalid_risk["severity"] = severity
+
+    response = client.post(
+        "/risks/",
+        json=invalid_risk,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_empty_risk_evidence_is_rejected():
+    token = get_analyst_token()
+
+    invalid_risk = TEST_RISK.copy()
+    invalid_risk["risk_id"] = "TEST_RISK_EMPTY_EVIDENCE"
+    invalid_risk["evidence"] = []
+
+    response = client.post(
+        "/risks/",
+        json=invalid_risk,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_empty_risk_reason_is_rejected():
+    token = get_analyst_token()
+
+    invalid_risk = TEST_RISK.copy()
+    invalid_risk["risk_id"] = "TEST_RISK_EMPTY_REASON"
+    invalid_risk["reason"] = ""
 
     response = client.post(
         "/risks/",
