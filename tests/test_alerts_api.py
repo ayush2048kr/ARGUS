@@ -207,3 +207,32 @@ def test_create_alert_rejects_empty_evidence():
     )
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("risk_score", "severity"),
+    [
+        (90, "LOW"),
+        (25, "MEDIUM"),
+        (50, "HIGH"),
+        (75, "CRITICAL"),
+        (100, "HIGH"),
+    ],
+)
+def test_inconsistent_alert_severity_is_rejected(risk_score, severity):
+    token = get_analyst_token()
+
+    payload = {
+        **TEST_ALERT,
+        "alert_id": f"TEST_ALERT_MISMATCH_{risk_score}_{severity}",
+        "risk_score": risk_score,
+        "severity": severity,
+    }
+
+    response = client.post(
+        "/alerts/",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422

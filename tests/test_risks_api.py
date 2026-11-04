@@ -48,6 +48,14 @@ TEST_RISK_IDS = [
     "TEST_RISK_AUTO_HIGH",
     "TEST_RISK_AUTO_CRITICAL",
     "TEST_RISK_AUTO_DUPLICATE",
+    "TEST_BOUNDARY_0",
+    "TEST_BOUNDARY_30",
+    "TEST_BOUNDARY_30_1",
+    "TEST_BOUNDARY_60",
+    "TEST_BOUNDARY_60_1",
+    "TEST_BOUNDARY_80",
+    "TEST_BOUNDARY_80_1",
+    "TEST_BOUNDARY_100",
 ]
 
 
@@ -406,3 +414,67 @@ def test_duplicate_alert_for_same_risk_is_rejected():
     assert alerts_collection.count_documents(
         {"risk_id": risk_id}
     ) == 1
+
+
+@pytest.mark.parametrize(
+    ("risk_score", "severity"),
+    [
+        (0, "LOW"),
+        (30, "LOW"),
+        (30.1, "MEDIUM"),
+        (60, "MEDIUM"),
+        (60.1, "HIGH"),
+        (80, "HIGH"),
+        (80.1, "CRITICAL"),
+        (100, "CRITICAL"),
+    ],
+)
+def test_risk_score_severity_boundaries_are_valid(risk_score, severity):
+    token = get_analyst_token()
+
+    risk_id = f"TEST_BOUNDARY_{str(risk_score).replace('.', '_')}"
+
+    payload = {
+        **TEST_RISK,
+        "risk_id": risk_id,
+        "risk_score": risk_score,
+        "severity": severity,
+    }
+
+    response = client.post(
+        "/risks/",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["severity"] == severity
+
+
+@pytest.mark.parametrize(
+    ("risk_score", "severity"),
+    [
+        (90, "LOW"),
+        (25, "MEDIUM"),
+        (50, "HIGH"),
+        (75, "CRITICAL"),
+        (100, "HIGH"),
+    ],
+)
+def test_inconsistent_risk_severity_is_rejected(risk_score, severity):
+    token = get_analyst_token()
+
+    payload = {
+        **TEST_RISK,
+        "risk_id": f"TEST_MISMATCH_{risk_score}_{severity}",
+        "risk_score": risk_score,
+        "severity": severity,
+    }
+
+    response = client.post(
+        "/risks/",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
