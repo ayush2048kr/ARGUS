@@ -9,7 +9,7 @@ class Alert(BaseModel):
     alert_id: str = Field(min_length=1, max_length=128)
     user_id: str = Field(min_length=1, max_length=64)
     event_id: str = Field(min_length=1, max_length=128)
-
+    risk_id: str | None = Field(default=None, min_length=1, max_length=128)
     risk_score: float = Field(ge=0, le=100)
     severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
