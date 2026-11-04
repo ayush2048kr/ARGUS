@@ -2,10 +2,11 @@
 from datetime import datetime
 
 import pytest
+from pymongo.errors import DuplicateKeyError
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.database.mongodb import db, users_collection
+from app.database.mongodb import alerts_collection, db, users_collection
 from app.auth.jwt import create_access_token
 
 client = TestClient(app)
@@ -42,6 +43,11 @@ TEST_RISK_IDS = [
     "TEST_RISK_SEVERITY_EMPTY",
     "TEST_RISK_EMPTY_EVIDENCE",
     "TEST_RISK_EMPTY_REASON",
+    "TEST_RISK_MEDIUM_NO_ALERT",
+    "TEST_RISK_LOW_NO_ALERT",
+    "TEST_RISK_AUTO_HIGH",
+    "TEST_RISK_AUTO_CRITICAL",
+    "TEST_RISK_AUTO_DUPLICATE",
 ]
 
 
@@ -62,11 +68,20 @@ def setup_module():
         {"risk_id": {"$in": TEST_RISK_IDS}}
     )
 
+    alerts_collection.delete_many(
+        {"risk_id": {"$in": TEST_RISK_IDS}}
+    )
+
 
 def teardown_module():
     risks_collection.delete_many(
         {"risk_id": {"$in": TEST_RISK_IDS}}
     )
+
+    alerts_collection.delete_many(
+        {"risk_id": {"$in": TEST_RISK_IDS}}
+    )
+
     users_collection.delete_one({"user_id": TEST_USER_ID})
 
 
@@ -251,3 +266,143 @@ def test_empty_risk_reason_is_rejected():
     )
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("severity", "risk_score", "risk_id"),
+    [
+        ("MEDIUM", 50.0, "TEST_RISK_MEDIUM_NO_ALERT"),
+        ("LOW", 20.0, "TEST_RISK_LOW_NO_ALERT"),
+    ],
+)
+def test_low_and_medium_risks_do_not_generate_alert(
+    severity, risk_score, risk_id
+):
+    token = get_analyst_token()
+
+    payload = {
+        **TEST_RISK,
+        "risk_id": risk_id,
+        "severity": severity,
+        "risk_score": risk_score,
+    }
+
+    response = client.post(
+        "/risks/",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+
+    saved_risk = risks_collection.find_one(
+        {"risk_id": risk_id}
+    )
+    assert saved_risk is not None
+
+    generated_alert = alerts_collection.find_one(
+        {"risk_id": risk_id}
+    )
+    assert generated_alert is None
+
+
+def test_high_risk_generates_explainable_alert():
+    token = get_analyst_token()
+    risk_id = "TEST_RISK_AUTO_HIGH"
+
+    payload = {
+        **TEST_RISK,
+        "risk_id": risk_id,
+    }
+
+    response = client.post(
+        "/risks/",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+
+    generated_alert = alerts_collection.find_one(
+        {"risk_id": risk_id},
+        {"_id": 0},
+    )
+
+    assert generated_alert is not None
+    assert generated_alert["alert_id"] == f"ALERT_{risk_id}"
+    assert generated_alert["risk_id"] == risk_id
+    assert generated_alert["user_id"] == payload["user_id"]
+    assert generated_alert["event_id"] == payload["event_id"]
+    assert generated_alert["risk_score"] == payload["risk_score"]
+    assert generated_alert["severity"] == "HIGH"
+    assert generated_alert["reason"] == payload["reason"]
+    assert generated_alert["evidence"] == payload["evidence"]
+    assert generated_alert["status"] == "open"
+
+
+def test_critical_risk_generates_alert():
+    token = get_analyst_token()
+    risk_id = "TEST_RISK_AUTO_CRITICAL"
+
+    payload = {
+        **TEST_RISK,
+        "risk_id": risk_id,
+        "risk_score": 90.0,
+        "severity": "CRITICAL",
+    }
+
+    response = client.post(
+        "/risks/",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+
+    generated_alert = alerts_collection.find_one(
+        {"risk_id": risk_id},
+        {"_id": 0},
+    )
+
+    assert generated_alert is not None
+    assert generated_alert["alert_id"] == f"ALERT_{risk_id}"
+    assert generated_alert["risk_id"] == risk_id
+    assert generated_alert["severity"] == "CRITICAL"
+    assert generated_alert["risk_score"] == 90.0
+    assert generated_alert["evidence"] == payload["evidence"]
+
+
+def test_duplicate_alert_for_same_risk_is_rejected():
+    token = get_analyst_token()
+    risk_id = "TEST_RISK_AUTO_DUPLICATE"
+
+    payload = {
+        **TEST_RISK,
+        "risk_id": risk_id,
+    }
+
+    response = client.post(
+        "/risks/",
+        json=payload,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+
+    first_alert = alerts_collection.find_one(
+        {"risk_id": risk_id}
+    )
+    assert first_alert is not None
+
+    duplicate_alert = {
+        **first_alert,
+        "alert_id": f"ALERT_DUPLICATE_{risk_id}",
+    }
+    duplicate_alert.pop("_id", None)
+
+    with pytest.raises(DuplicateKeyError):
+        alerts_collection.insert_one(duplicate_alert)
+
+    assert alerts_collection.count_documents(
+        {"risk_id": risk_id}
+    ) == 1

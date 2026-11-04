@@ -30,3 +30,11 @@ users_collection.create_index(
     unique=True,
     name="unique_user_id",
 )
+
+# Prevent more than one generated alert for the same risk assessment.
+alerts_collection.create_index(
+    [("risk_id", 1)],
+    unique=True,
+    partialFilterExpression={"risk_id": {"$type": "string"}},
+    name="unique_alert_risk_id",
+)
