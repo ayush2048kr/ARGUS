@@ -2,7 +2,9 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from app.models.risk_level import get_severity_from_score
 
 
 class Alert(BaseModel):
@@ -10,6 +12,7 @@ class Alert(BaseModel):
     user_id: str = Field(min_length=1, max_length=64)
     event_id: str = Field(min_length=1, max_length=128)
     risk_id: str | None = Field(default=None, min_length=1, max_length=128)
+
     risk_score: float = Field(ge=0, le=100)
     severity: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
@@ -18,3 +21,15 @@ class Alert(BaseModel):
 
     status: Literal["open", "investigating", "resolved"] = "open"
     created_at: datetime
+
+    @model_validator(mode="after")
+    def validate_severity_matches_score(self):
+        expected_severity = get_severity_from_score(self.risk_score)
+
+        if self.severity != expected_severity:
+            raise ValueError(
+                f"Severity must be {expected_severity} "
+                f"for risk score {self.risk_score}"
+            )
+
+        return self
