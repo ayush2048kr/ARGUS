@@ -15,6 +15,7 @@ risks_collection = db["risks"]
 
 TEST_USER_ID = "TEST_EMP_RISK"
 TEST_RISK_ID = "TEST_RISK_API"
+TEST_DUPLICATE_RISK_ID = "TEST_RISK_DUPLICATE_API"
 
 TEST_RISK = {
     "risk_id": TEST_RISK_ID,
@@ -36,6 +37,7 @@ TEST_RISK = {
 
 TEST_RISK_IDS = [
     TEST_RISK_ID,
+    TEST_DUPLICATE_RISK_ID,
     "TEST_RISK_INVALID_HIGH",
     "TEST_RISK_INVALID_LOW",
     "TEST_RISK_SEVERITY_UNKNOWN",
@@ -114,6 +116,42 @@ def test_create_risk():
     assert data["risk_score"] == 75.5
     assert data["severity"] == "HIGH"
     assert "_id" not in data
+
+
+def test_duplicate_risk_id_is_rejected():
+    token = get_analyst_token()
+
+    payload = {
+        **TEST_RISK,
+        "risk_id": TEST_DUPLICATE_RISK_ID,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
+
+    first_response = client.post(
+        "/risks/",
+        json=payload,
+        headers=headers,
+    )
+
+    assert first_response.status_code == 200
+
+    duplicate_response = client.post(
+        "/risks/",
+        json=payload,
+        headers=headers,
+    )
+
+    assert duplicate_response.status_code == 409
+    assert duplicate_response.json()["detail"] == (
+        "A risk assessment with this risk_id already exists"
+    )
+
+    assert risks_collection.count_documents(
+        {"risk_id": TEST_DUPLICATE_RISK_ID}
+    ) == 1
 
 
 def test_risk_persisted_in_mongodb():

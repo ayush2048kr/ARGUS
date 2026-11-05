@@ -23,6 +23,7 @@ db = client[DB_NAME]
 events_collection = db["events"]
 users_collection = db["users"]
 alerts_collection = db["alerts"]
+risks_collection = db["risks"]
 
 # Enforce unique user IDs at the database level.
 users_collection.create_index(
@@ -37,4 +38,10 @@ alerts_collection.create_index(
     unique=True,
     partialFilterExpression={"risk_id": {"$type": "string"}},
     name="unique_alert_risk_id",
+)
+# Enforce unique risk assessment IDs.
+risks_collection.create_index(
+    [("risk_id", 1)],
+    unique=True,
+    name="unique_risk_id",
 )

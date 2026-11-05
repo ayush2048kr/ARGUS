@@ -1,4 +1,6 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pymongo.errors import DuplicateKeyError
 
 from app.auth.dependencies import require_role
 from app.models.risk import RiskAssessment
@@ -21,7 +23,14 @@ def create_risk(
     risk: RiskAssessment,
     current_user: dict = Depends(require_role(["admin", "analyst"]))
 ):
-    return create_risk_assessment(risk.model_dump())
+    try:
+        return create_risk_assessment(risk.model_dump())
+
+    except DuplicateKeyError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A risk assessment with this risk_id already exists"
+        )
 
 
 @router.get("/")
