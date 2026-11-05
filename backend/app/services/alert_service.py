@@ -1,3 +1,4 @@
+
 from app.database.mongodb import alerts_collection
 
 
@@ -32,4 +33,4 @@ def update_alert_status(alert_id: str, status: str) -> bool:
         {"$set": {"status": status}}
     )
 
-    return result.modified_count > 0
+    return result.matched_count > 0

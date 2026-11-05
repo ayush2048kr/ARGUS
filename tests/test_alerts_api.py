@@ -127,6 +127,33 @@ def test_update_alert_status():
     assert response.status_code == 200
 
 
+def test_update_alert_status_to_same_status_succeeds():
+    token = get_analyst_token()
+    same_status_alert_id = f"{TEST_ALERT_ID}_SAME_STATUS"
+
+    # Prepare an alert that is already in the investigating state.
+    alerts_collection.update_one(
+        {"alert_id": same_status_alert_id},
+        {
+            "$set": {
+                **TEST_ALERT,
+                "alert_id": same_status_alert_id,
+                "status": "investigating",
+            }
+        },
+        upsert=True,
+    )
+
+    # Updating it to the same status should still succeed.
+    response = client.patch(
+        f"/alerts/{same_status_alert_id}/status",
+        params={"new_status": "investigating"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+
+
 def test_invalid_alert_status_rejected():
     token = get_analyst_token()
 
