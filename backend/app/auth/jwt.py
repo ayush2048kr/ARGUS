@@ -1,34 +1,40 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 import os
 
 from dotenv import load_dotenv
 from jose import jwt, JWTError
 
-load_dotenv("backend/.env")
 
-# =========================
-# JWT CONFIGURATION
-# =========================
+# Load the backend .env file independently of the terminal's working directory.
+ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(dotenv_path=ENV_FILE, override=False)
 
-SECRET_KEY = os.getenv(
-    "ARGUS_SECRET_KEY",
-    "ARGUS_DEVELOPMENT_SECRET_KEY_CHANGE_LATER"
-)
+
+# Never use a hardcoded fallback for the JWT signing key.
+SECRET_KEY = os.getenv("ARGUS_SECRET_KEY")
+
+if not SECRET_KEY:
+    raise RuntimeError(
+        "ARGUS_SECRET_KEY is missing. Configure it in backend/.env."
+    )
+
+if SECRET_KEY == "generate-a-secure-random-secret":
+    raise RuntimeError(
+        "Replace the placeholder ARGUS_SECRET_KEY with a secure random secret."
+    )
+
+if len(SECRET_KEY.encode("utf-8")) < 32:
+    raise RuntimeError(
+        "ARGUS_SECRET_KEY must be at least 32 bytes long."
+    )
+
 
 ALGORITHM = "HS256"
-
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 
-# =========================
-# CREATE JWT TOKEN
-# =========================
-
 def create_access_token(user_id: str, role: str) -> str:
-    """
-    Create a JWT access token for an ARGUS user.
-    """
-
     expire_time = datetime.now(timezone.utc) + timedelta(
         minutes=ACCESS_TOKEN_EXPIRE_MINUTES
     )
@@ -36,38 +42,19 @@ def create_access_token(user_id: str, role: str) -> str:
     payload = {
         "sub": user_id,
         "role": role,
-        "exp": expire_time
+        "exp": expire_time,
     }
 
-    token = jwt.encode(
-        payload,
-        SECRET_KEY,
-        algorithm=ALGORITHM
-    )
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
-    return token
-
-
-# =========================
-# DECODE JWT TOKEN
-# =========================
 
 def decode_access_token(token: str) -> dict | None:
-    """
-    Decode and validate a JWT access token.
-
-    Returns the decoded payload when valid.
-    Returns None when the token is invalid or expired.
-    """
-
     try:
         payload = jwt.decode(
             token,
             SECRET_KEY,
-            algorithms=[ALGORITHM]
+            algorithms=[ALGORITHM],
         )
-
         return payload
-
     except JWTError:
         return None
