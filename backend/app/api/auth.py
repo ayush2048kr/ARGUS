@@ -14,6 +14,16 @@ router = APIRouter(
 )
 
 
+def validate_password_input(value: str) -> str:
+    if not value.strip():
+        raise ValueError("Password cannot be empty or whitespace")
+
+    if len(value.encode("utf-8")) > 72:
+        raise ValueError("Password cannot be longer than 72 UTF-8 bytes")
+
+    return value
+
+
 class RegisterRequest(BaseModel):
     user_id: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=128)
@@ -29,9 +39,7 @@ class RegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Password cannot be empty or whitespace")
-        return value
+        return validate_password_input(value)
 
 
 class LoginRequest(BaseModel):
@@ -49,9 +57,7 @@ class LoginRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def validate_password(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Password cannot be empty or whitespace")
-        return value
+        return validate_password_input(value)
 
 
 @router.post("/register")

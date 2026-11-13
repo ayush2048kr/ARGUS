@@ -227,3 +227,74 @@ def test_login_rejects_invalid_input(payload):
     )
 
     assert response.status_code == 422
+
+
+def test_register_accepts_password_exactly_72_bytes(test_user_id):
+    password = "€" * 24
+
+    assert len(password.encode("utf-8")) == 72
+
+    response = client.post(
+        "/auth/register",
+        json={
+            "user_id": test_user_id,
+            "password": password,
+        },
+    )
+
+    assert response.status_code == 200
+
+
+def test_login_accepts_password_exactly_72_bytes(test_user_id):
+    password = "€" * 24
+
+    users_collection.insert_one(
+        {
+            "user_id": test_user_id,
+            "password": hash_password(password),
+            "role": "analyst",
+            "is_active": True,
+        }
+    )
+
+    response = client.post(
+        "/auth/login",
+        json={
+            "user_id": test_user_id,
+            "password": password,
+        },
+    )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("password", ["a" * 73, "€" * 25])
+def test_register_rejects_password_over_72_bytes(
+    test_user_id,
+    password,
+):
+    response = client.post(
+        "/auth/register",
+        json={
+            "user_id": test_user_id,
+            "password": password,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("password", ["a" * 73, "€" * 25])
+def test_login_rejects_password_over_72_bytes(
+    test_user_id,
+    password,
+):
+    response = client.post(
+        "/auth/login",
+        json={
+            "user_id": test_user_id,
+            "password": password,
+        },
+    )
+
+    assert response.status_code == 422
