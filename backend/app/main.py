@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pymongo.errors import PyMongoError
 
 from app.api.events import router as events_router
 from app.api.auth import router as auth_router
@@ -8,13 +11,25 @@ from app.api.alerts import router as alerts_router
 from app.api.risks import router as risks_router
 from app.api.dashboard import router as dashboard_router
 
+from app.database.mongodb import (
+    initialize_database,
+    check_database_connection,
+)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    initialize_database()
+    yield
+
+
 app = FastAPI(
     title="ARGUS Backend",
     description="Context-Aware Insider Threat Detection System",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
-# Allow the local React/Vite development server to call the API.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -41,4 +56,14 @@ def root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    try:
+        check_database_connection()
+        return {"status": "healthy"}
+    except PyMongoError:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "unhealthy",
+                "database": "unavailable",
+            },
+        )

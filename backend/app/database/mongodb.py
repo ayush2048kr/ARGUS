@@ -1,10 +1,15 @@
 
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
-load_dotenv("backend/.env")
+# Resolve backend/.env independently of the current working directory.
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+ENV_FILE = BACKEND_DIR / ".env"
+
+load_dotenv(dotenv_path=ENV_FILE, override=False)
 
 MONGO_URI = os.getenv(
     "MONGO_URI",
@@ -16,7 +21,13 @@ DB_NAME = os.getenv(
     "argus",
 )
 
-client = MongoClient(MONGO_URI)
+# Bound connection attempts so unavailable MongoDB does not cause
+# unnecessarily long waits.
+client = MongoClient(
+    MONGO_URI,
+    serverSelectionTimeoutMS=5000,
+    connectTimeoutMS=5000,
+)
 
 db = client[DB_NAME]
 
@@ -25,23 +36,33 @@ users_collection = db["users"]
 alerts_collection = db["alerts"]
 risks_collection = db["risks"]
 
-# Enforce unique user IDs at the database level.
-users_collection.create_index(
-    [("user_id", 1)],
-    unique=True,
-    name="unique_user_id",
-)
 
-# Prevent more than one generated alert for the same risk assessment.
-alerts_collection.create_index(
-    [("risk_id", 1)],
-    unique=True,
-    partialFilterExpression={"risk_id": {"$type": "string"}},
-    name="unique_alert_risk_id",
-)
-# Enforce unique risk assessment IDs.
-risks_collection.create_index(
-    [("risk_id", 1)],
-    unique=True,
-    name="unique_risk_id",
-)
+def initialize_database():
+    """Create required indexes while preserving existing constraints."""
+
+    # Enforce unique user IDs at the database level.
+    users_collection.create_index(
+        [("user_id", 1)],
+        unique=True,
+        name="unique_user_id",
+    )
+
+    # Prevent more than one generated alert for the same risk assessment.
+    alerts_collection.create_index(
+        [("risk_id", 1)],
+        unique=True,
+        partialFilterExpression={"risk_id": {"$type": "string"}},
+        name="unique_alert_risk_id",
+    )
+
+    # Enforce unique risk assessment IDs.
+    risks_collection.create_index(
+        [("risk_id", 1)],
+        unique=True,
+        name="unique_risk_id",
+    )
+
+
+def check_database_connection():
+    """Verify that MongoDB is reachable."""
+    return db.command("ping")
