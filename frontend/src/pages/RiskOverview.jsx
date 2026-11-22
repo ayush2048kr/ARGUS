@@ -1,268 +1,269 @@
-import { useMemo, useState } from "react";
-import sampleAlerts from "../data/sampleAlerts";
 
-const riskStyles = {
+import { useEffect, useMemo, useState } from "react";
+import { getLatestDailyRisks } from "../api/client";
+
+const levels = ["LOW", "MEDIUM", "HIGH", "CRITICAL", "UNAVAILABLE"];
+
+const styles = {
   LOW: "bg-emerald-100 text-emerald-700",
   MEDIUM: "bg-amber-100 text-amber-700",
   HIGH: "bg-orange-100 text-orange-700",
   CRITICAL: "bg-red-100 text-red-700",
+  UNAVAILABLE: "bg-slate-100 text-slate-600",
 };
 
-const riskOrder = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const bars = {
+  LOW: "bg-emerald-500",
+  MEDIUM: "bg-amber-400",
+  HIGH: "bg-orange-500",
+  CRITICAL: "bg-red-500",
+  UNAVAILABLE: "bg-slate-400",
+};
 
-function RiskOverview({ onInvestigateUser }) {
-  const [selectedRisk, setSelectedRisk] = useState("ALL");
+export default function RiskOverview({ onInvestigateUser }) {
+  const [records, setRecords] = useState([]);
+  const [filter, setFilter] = useState("ALL");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const alerts = Array.isArray(sampleAlerts) ? sampleAlerts : [];
+  useEffect(() => {
+    let cancelled = false;
 
-  const riskCounts = useMemo(
-    () =>
-      riskOrder.reduce((counts, level) => {
-        counts[level] = alerts.filter(
-          (alert) => alert.risk_level === level
-        ).length;
-        return counts;
-      }, {}),
-    [alerts]
-  );
+    async function load() {
+      setLoading(true);
+      setError("");
 
-  const filteredAlerts = alerts
-    .filter(
-      (alert) =>
-        selectedRisk === "ALL" || alert.risk_level === selectedRisk
-    )
-    .sort((a, b) => b.risk_score - a.risk_score);
+      try {
+        const result = await getLatestDailyRisks(5000);
 
-  const highestScore =
-    alerts.length > 0
-      ? Math.max(...alerts.map((alert) => Number(alert.risk_score) || 0))
-      : 0;
+        if (!cancelled) {
+          setRecords(Array.isArray(result) ? result : []);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Could not load risk assessments.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const counts = useMemo(() => {
+    const result = Object.fromEntries(levels.map((level) => [level, 0]));
+
+    records.forEach((record) => {
+      const level = String(record.risk_level || "UNAVAILABLE").toUpperCase();
+      if (level in result) result[level] += 1;
+    });
+
+    return result;
+  }, [records]);
+
+  const filtered = useMemo(() => {
+    return records
+      .filter((record) =>
+        filter === "ALL" ? true : record.risk_level === filter
+      )
+      .sort((a, b) => (b.risk_score ?? -1) - (a.risk_score ?? -1));
+  }, [records, filter]);
+
+  const scored = records.filter(
+    (record) => record.risk_status === "scored"
+  ).length;
 
   return (
-    <div className="space-y-8">
-      <section>
+    <div className="space-y-7">
+      <header>
         <h2 className="text-2xl font-semibold text-slate-900">
           Risk Overview
         </h2>
         <p className="mt-2 text-slate-600">
-          Review sample risk levels and identify employees requiring further
-          investigation.
+          Latest daily context-aware risk assessments from the ARGUS backend.
         </p>
-        <p className="mt-2 text-sm text-slate-500">
-          Prototype data only — these are not live ARGUS risk assessments.
-        </p>
-      </section>
+      </header>
 
-      {/* Risk summary cards */}
-      <section className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        {riskOrder.map((level) => (
-          <button
-            key={level}
-            type="button"
-            onClick={() =>
-              setSelectedRisk(selectedRisk === level ? "ALL" : level)
-            }
-            aria-pressed={selectedRisk === level}
-            className={`rounded-xl border bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-              selectedRisk === level
-                ? "border-blue-500 ring-2 ring-blue-100"
-                : "border-slate-200"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-medium text-slate-500">
-                {level} Risk
-              </span>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${riskStyles[level]}`}
+      {error && (
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="rounded-xl border bg-white p-8 text-center text-slate-500">
+          Loading daily risk assessments...
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            {levels.map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setFilter(filter === level ? "ALL" : level)}
+                aria-pressed={filter === level}
+                className={`rounded-xl border bg-white p-5 text-left shadow-sm ${
+                  filter === level
+                    ? "border-blue-500 ring-2 ring-blue-100"
+                    : "border-slate-200"
+                }`}
               >
-                {level}
-              </span>
+                <span className={`rounded-full px-2 py-1 text-xs font-semibold ${styles[level]}`}>
+                  {level}
+                </span>
+                <p className="mt-4 text-3xl font-bold text-slate-900">
+                  {counts[level]}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Latest employee assessments
+                </p>
+              </button>
+            ))}
+          </div>
+
+          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Risk Distribution
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Distribution of latest employee assessments.
+                </p>
+              </div>
+              <p className="text-sm text-slate-500">
+                {records.length} employees · {scored} scored
+              </p>
             </div>
 
-            <p className="mt-4 text-3xl font-bold text-slate-900">
-              {riskCounts[level] ?? 0}
-            </p>
-            <p className="mt-1 text-sm text-slate-500">
-              Sample alerts
-            </p>
-          </button>
-        ))}
-      </section>
+            <div className="mt-6 space-y-5">
+              {levels.map((level) => {
+                const percentage = records.length
+                  ? (counts[level] / records.length) * 100
+                  : 0;
 
-      {/* Severity distribution */}
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">
-              Risk Distribution
-            </h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Sample alert counts by severity.
-            </p>
-          </div>
-          <span className="text-sm text-slate-500">
-            {alerts.length} total sample alerts
-          </span>
-        </div>
+                return (
+                  <div key={level}>
+                    <div className="mb-2 flex justify-between text-sm">
+                      <span className="font-medium text-slate-700">
+                        {level}
+                      </span>
+                      <span className="text-slate-500">
+                        {counts[level]} · {percentage.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={`h-full rounded-full ${bars[level]}`}
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
 
-        <div className="mt-6 space-y-5">
-          {riskOrder.map((level) => {
-            const count = riskCounts[level] ?? 0;
-            const percentage =
-              alerts.length > 0 ? (count / alerts.length) * 100 : 0;
-
-            const barStyles = {
-              LOW: "bg-emerald-500",
-              MEDIUM: "bg-amber-400",
-              HIGH: "bg-orange-500",
-              CRITICAL: "bg-red-500",
-            };
-
-            return (
-              <div key={level}>
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-slate-700">
-                    {level}
-                  </span>
-                  <span className="text-sm text-slate-500">
-                    {count} alerts · {Math.round(percentage)}%
-                  </span>
-                </div>
-
-                <div
-                  className="h-3 overflow-hidden rounded-full bg-slate-100"
-                  role="progressbar"
-                  aria-label={`${level} risk alert distribution`}
-                  aria-valuenow={Math.round(percentage)}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                >
-                  <div
-                    className={`h-full rounded-full transition-all ${barStyles[level]}`}
-                    style={{ width: `${percentage}%` }}
-                  />
-                </div>
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 p-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Employee Risk Register
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  One latest daily assessment per employee.
+                </p>
               </div>
-            );
-          })}
-        </div>
-      </section>
 
-      {/* Highest-risk sample alerts */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 p-6">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">
-              Highest-Risk Employees
-            </h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Employees associated with the highest-scoring sample alerts.
-            </p>
-          </div>
-
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            Severity
-            <select
-              value={selectedRisk}
-              onChange={(event) => setSelectedRisk(event.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            >
-              <option value="ALL">All levels</option>
-              {riskOrder.map((level) => (
-                <option key={level} value={level}>
-                  {level}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {filteredAlerts.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[650px] text-left text-sm">
-              <thead className="bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="px-6 py-4 font-medium">Alert ID</th>
-                  <th className="px-6 py-4 font-medium">Employee</th>
-                  <th className="px-6 py-4 font-medium">Risk Score</th>
-                  <th className="px-6 py-4 font-medium">Severity</th>
-                  <th className="px-6 py-4 font-medium">Reason</th>
-                  <th className="px-6 py-4 font-medium">Action</th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100">
-                {filteredAlerts.map((alert) => (
-                  <tr
-                    key={alert.alert_id}
-                    className="transition hover:bg-slate-50"
-                  >
-                    <td className="px-6 py-4 font-semibold text-slate-900">
-                      {alert.alert_id}
-                    </td>
-                    <td className="px-6 py-4 text-slate-700">
-                      {alert.user_id}
-                    </td>
-                    <td className="px-6 py-4 font-bold text-slate-900">
-                      {alert.risk_score}
-                      <span className="font-normal text-slate-400">
-                        /100
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          riskStyles[alert.risk_level] ??
-                          "bg-slate-100 text-slate-700"
-                        }`}
-                      >
-                        {alert.risk_level}
-                      </span>
-                    </td>
-                    <td className="max-w-xs px-6 py-4 text-slate-600">
-                      {alert.reason}
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onInvestigateUser?.(alert.user_id)
-                        }
-                        className="whitespace-nowrap font-semibold text-blue-600 hover:text-blue-800"
-                      >
-                        Investigate →
-                      </button>
-                    </td>
-                  </tr>
+              <select
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                aria-label="Filter by risk level"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="ALL">All risk levels</option>
+                {levels.map((level) => (
+                  <option key={level} value={level}>{level}</option>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="p-10 text-center">
-            <p className="font-medium text-slate-700">
-              No alerts match this severity.
-            </p>
-            <button
-              type="button"
-              onClick={() => setSelectedRisk("ALL")}
-              className="mt-3 font-semibold text-blue-600 hover:text-blue-800"
-            >
-              Clear filter
-            </button>
-          </div>
-        )}
-      </section>
+              </select>
+            </div>
 
-      <p className="text-xs leading-5 text-slate-500">
-        Risk categories follow the ARGUS prototype thresholds: LOW 0–30,
-        MEDIUM 31–60, HIGH 61–80, and CRITICAL 81–100. This page displays the
-        severity supplied by the sample alert data; it does not calculate
-        official risk scores.
-      </p>
+            {filtered.length ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[750px] text-left text-sm">
+                  <thead className="bg-slate-50 text-slate-500">
+                    <tr>
+                      <th className="px-5 py-4">Employee ID</th>
+                      <th className="px-5 py-4">Role</th>
+                      <th className="px-5 py-4">LDAP Domain</th>
+                      <th className="px-5 py-4">Date</th>
+                      <th className="px-5 py-4">Risk Score</th>
+                      <th className="px-5 py-4">Risk Level</th>
+                      <th className="px-5 py-4">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filtered.map((record) => (
+                      <tr
+                        key={`${record.user_id}-${record.date}`}
+                        className="hover:bg-slate-50"
+                      >
+                        <td className="px-5 py-4 font-semibold text-slate-900">
+                          {record.user_id}
+                        </td>
+                        <td className="px-5 py-4 text-slate-600">
+                          {record.role || "Not available"}
+                        </td>
+                        <td className="px-5 py-4 text-slate-600">
+                          {record.ldap_domain || "Not available"}
+                        </td>
+                        <td className="px-5 py-4 text-slate-600">
+                          {record.date}
+                        </td>
+                        <td className="px-5 py-4 font-semibold text-slate-900">
+                          {record.risk_score == null
+                            ? "Unavailable"
+                            : `${Number(record.risk_score).toFixed(2)}/100`}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${styles[record.risk_level] || styles.UNAVAILABLE}`}>
+                            {record.risk_level || "UNAVAILABLE"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <button
+                            type="button"
+                            onClick={() => onInvestigateUser?.(record.user_id)}
+                            className="whitespace-nowrap font-semibold text-blue-600 hover:text-blue-800"
+                          >
+                            Investigate →
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="p-8 text-center text-sm text-slate-500">
+                No assessments found for this filter.
+              </p>
+            )}
+          </section>
+
+          <p className="text-xs leading-5 text-slate-500">
+            Risk thresholds: LOW 0–30, MEDIUM 31–60, HIGH 61–80, CRITICAL
+            81–100. UNAVAILABLE means insufficient evidence. An anomaly does
+            not establish malicious intent.
+          </p>
+        </>
+      )}
     </div>
   );
 }
-
-export default RiskOverview;

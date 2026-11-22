@@ -35,10 +35,27 @@ events_collection = db["events"]
 users_collection = db["users"]
 alerts_collection = db["alerts"]
 risks_collection = db["risks"]
-
+daily_risks_collection = db["daily_risks"]
+cluster_summaries_collection = db["cluster_summaries"]
+cluster_assignments_collection = db["cluster_assignments"]
 
 def initialize_database():
     """Create required indexes while preserving existing constraints."""
+    daily_risks_collection.create_index(
+    [("user_id", 1), ("date", 1)],
+    unique=True,
+    name="unique_daily_user_date",
+)
+
+    cluster_summaries_collection.create_index(
+        [("model_key", 1)], unique=True, name="unique_cluster_model"
+    )
+    cluster_assignments_collection.create_index(
+        [("user_id", 1)], unique=True, name="unique_cluster_user"
+    )
+    cluster_assignments_collection.create_index(
+        [("cluster_id", 1)], name="cluster_assignment_lookup"
+    )
 
     # Enforce unique user IDs at the database level.
     users_collection.create_index(

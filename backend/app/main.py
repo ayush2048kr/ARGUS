@@ -1,3 +1,4 @@
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -10,6 +11,8 @@ from app.api.users import router as users_router
 from app.api.alerts import router as alerts_router
 from app.api.risks import router as risks_router
 from app.api.dashboard import router as dashboard_router
+from app.api.daily_risks import router as daily_risks_router
+from app.api.clusters import router as clusters_router
 
 from app.database.mongodb import (
     initialize_database,
@@ -46,6 +49,8 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(alerts_router)
 app.include_router(risks_router)
+app.include_router(daily_risks_router)
+app.include_router(clusters_router)
 app.include_router(dashboard_router)
 
 
