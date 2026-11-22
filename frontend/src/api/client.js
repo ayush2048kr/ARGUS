@@ -96,3 +96,24 @@ export function getRisksForUser(userId) {
 export function getCurrentUser() {
   return apiRequest("/users/me");
 }
+export function getLatestDailyRisks(limit = 5000) {
+  return apiRequest(`/daily-risks/latest?limit=${limit}`);
+}
+
+export function getDailyRisksForUser(userId) {
+  return apiRequest(
+    `/daily-risks/user/${encodeURIComponent(userId)}`
+  );
+}
+
+export function getClusterSummary() {
+  return apiRequest("/clusters/summary");
+}
+
+export function getClusterUsers(clusterId, limit = 100) {
+  return apiRequest(`/clusters/${clusterId}/users?limit=${limit}`);
+}
+
+export function getUserCluster(userId) {
+  return apiRequest(`/clusters/users/${encodeURIComponent(userId)}`);
+}
