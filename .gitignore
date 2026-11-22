@@ -1,58 +1,129 @@
-# ARGUS - Data files
-# Large/raw datasets - NEVER commit
+
+# ==========================================
+# ARGUS - Git Ignore Rules
+# ==========================================
+
+# ------------------------------------------
+# Data files
+# ------------------------------------------
+
+# Raw and processed datasets
 data/raw/
 data/processed/
+
+# CSV datasets and generated data
 *.csv
+
+# Archives and compressed files
 *.zip
+*.rar
 *.7z
 *.tar
 *.gz
-*.parquet
 
+# ------------------------------------------
 # Python
+# ------------------------------------------
+
 __pycache__/
 *.py[cod]
-*.pyo
+*$py.class
 
 # Virtual environments
-.venv/
 venv/
+.venv/
 env/
+ENV/
 
+# Python packaging
+build/
+dist/
+*.egg-info/
+
+# ------------------------------------------
 # Environment variables and secrets
+# ------------------------------------------
+
 .env
 .env.*
 !.env.example
 
-frontend/.env
-frontend/.env.*
-!frontend/.env.example
-
 backend/.env
-backend/.env.*
-!backend/.env.example
+frontend/.env
 
-# Node / frontend build output
+# Certificates and private keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ------------------------------------------
+# Frontend
+# ------------------------------------------
+
 node_modules/
+frontend/node_modules/
+
+frontend/dist/
+frontend/build/
+
 npm-debug.log*
-dist/
-build/
+yarn-debug.log*
+pnpm-debug.log*
 
-# Jupyter
-.ipynb_checkpoints/
+# ------------------------------------------
+# Backend and application logs
+# ------------------------------------------
 
-# MongoDB
-*.db
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs and temporary files
 *.log
+logs/
+
+# ------------------------------------------
+# Temporary files
+# ------------------------------------------
+
 tmp/
 temp/
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# ------------------------------------------
+# Jupyter
+# ------------------------------------------
+
+.ipynb_checkpoints/
+
+# ------------------------------------------
+# MongoDB
+# ------------------------------------------
+
+mongodb/
+mongodata/
+
+# ------------------------------------------
+# IDE and editor files
+# ------------------------------------------
+
+.vscode/
+.idea/
+*.iml
+
+# ------------------------------------------
+# Operating system files
+# ------------------------------------------
+
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+desktop.ini
+
+# ------------------------------------------
+# Generated ARGUS risk-pipeline outputs
+# ------------------------------------------
+
+ml/evaluation/output/argus_risk_pipeline_daily.csv
+ml/evaluation/output/argus_risk_pipeline_summary.csv
+ml/evaluation/output/peer_deviation_user_profiles.csv
